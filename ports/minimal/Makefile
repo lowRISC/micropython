@@ -24,8 +24,8 @@ CFLAGS = $(INC) -Wall -Werror -std=c99 -nostdlib $(CFLAGS_CORTEX_M4) $(COPT)
 LDFLAGS = -nostdlib -T stm32f405.ld -Map=$@.map --cref --gc-sections
 else
 LD = gcc
-CFLAGS = -m32 $(INC) -Wall -Werror -std=c99 $(COPT)
-LDFLAGS = -m32 -Wl,-Map=$@.map,--cref -Wl,--gc-sections
+CFLAGS = $(INC) -Wall -Werror -std=c99 $(COPT) -DFFCONF_H=\"lib/oofatfs/ffconf.h\"
+LDFLAGS = -Wl,-Map=$@.map,--cref -Wl,--gc-sections
 endif
 
 # Tune for Debugging or Optimization
@@ -36,11 +36,15 @@ CFLAGS += -Os -DNDEBUG
 CFLAGS += -fdata-sections -ffunction-sections
 endif
 
-LIBS =
+LIBS = -lm
 
 SRC_C = \
 	main.c \
+	modos.c \
 	uart_core.c \
+        lib/oofatfs/ff.c \
+	lib/oofatfs/option/ccsbcs.c \
+	lib/timeutils/timeutils.c \
 	lib/utils/stdout_helpers.c \
 	lib/utils/pyexec.c \
 	lib/libc/string0.c \

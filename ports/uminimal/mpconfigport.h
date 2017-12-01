@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <unistd.h>
 
 // options to control how MicroPython is built
 
@@ -8,7 +9,6 @@
 #define MICROPY_ENABLE_COMPILER     (1)
 
 #define MICROPY_QSTR_BYTES_IN_HASH  (1)
-#define MICROPY_QSTR_EXTRA_POOL     mp_qstr_frozen_const_pool
 #define MICROPY_ALLOC_PATH_MAX      (256)
 #define MICROPY_ALLOC_PARSE_CHUNK_INIT (16)
 #define MICROPY_EMIT_X64            (0)
@@ -23,10 +23,12 @@
 #define MICROPY_ENABLE_GC           (0)
 #define MICROPY_GC_ALLOC_THRESHOLD  (0)
 #define MICROPY_REPL_EVENT_DRIVEN   (0)
+#define MICROPY_READER_VFS          (0)
+#define MICROPY_READER_POSIX        (1)
 #define MICROPY_HELPER_REPL         (1)
 #define MICROPY_VFS                 (1)
 #define MICROPY_VFS_FAT             (1)
-#define MICROPY_HELPER_LEXER_UNIX   (0)
+#define MICROPY_HELPER_LEXER_UNIX   (1)
 #define MICROPY_ENABLE_SOURCE_LINE  (0)
 #define MICROPY_ENABLE_DOC_STRING   (0)
 #define MICROPY_ERROR_REPORTING     (MICROPY_ERROR_REPORTING_TERSE)
@@ -53,10 +55,15 @@
 #define MICROPY_PY_IO_FILEIO        (1)
 #define MICROPY_PY_STRUCT           (1)
 #define MICROPY_PY_SYS              (1)
-#define MICROPY_MODULE_FROZEN_MPY   (1)
+#define MICROPY_MODULE_FROZEN_MPY   (0)
 #define MICROPY_CPYTHON_COMPAT      (0)
-#define MICROPY_LONGINT_IMPL        (MICROPY_LONGINT_IMPL_NONE)
+#define MICROPY_LONGINT_IMPL        (MICROPY_LONGINT_IMPL_MPZ)
 #define MICROPY_FLOAT_IMPL          (MICROPY_FLOAT_IMPL_DOUBLE)
+#define MICROPY_STREAMS_POSIX_API   (1)
+#define MICROPY_OPT_CACHE_MAP_LOOKUP_IN_BYTECODE (1)
+#define MICROPY_KBD_EXCEPTION       (1)
+
+//#define MICROPY_PY_SYS_PLATFORM     "uminimal"
 
 // type definitions for the specific machine
 
@@ -73,8 +80,10 @@
 #define MICROPY_FATFS_USE_LABEL        (1)
 #define MICROPY_FATFS_RPATH            (2)
 #define MICROPY_FATFS_MULTI_PARTITION  (1)
+/*
 #define mp_type_fileio fatfs_type_fileio
 #define mp_type_textio fatfs_type_textio
+*/
 
 extern const struct _mp_obj_module_t mp_module_os;
 extern const struct _mp_obj_module_t mp_module_uos_vfs;
@@ -102,7 +111,7 @@ typedef long mp_off_t;
 #define MICROPY_PY_UOS_VFS             (1)
 #define MICROPY_VFS_FAT                (1)
 
-#define MP_PLAT_PRINT_STRN(str, len) mp_hal_stdout_tx_strn_cooked(str, len)
+#define MP_PLAT_PRINT_STRN(str, len) mp_hal_stdout_tx_strn(str, len)
 
 // extra built in names to add to the global namespace
 #define MICROPY_PORT_BUILTINS \
