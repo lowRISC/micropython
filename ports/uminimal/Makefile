@@ -188,6 +188,8 @@ SRC_C = \
 	modos.c \
 	moduos_vfs.c \
 	fatfs_port.c \
+	sd_diskio.c \
+	spi.c \
 	$(SRC_MOD)
 
 LIB_SRC_C = $(addprefix lib/,\
