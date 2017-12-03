@@ -1,15 +1,18 @@
 // See LICENSE for license details.
 
 #include "spi.h"
+#include "stubs.h"
 
 #define GetBit(r, p) (((r) & (1 <<p)) >> p)
 
 volatile uint32_t *spi_base_ptr;
 
-void spi_init(void *SPI_BASE) {
-  uint32_t resp;
-  spi_base_ptr = (uint32_t *)(SPI_BASE);
-
+void spi_init(void) {
+  if (!spi_base_ptr)
+    {
+      abort();
+    }
+  
   // power off SD
   *(spi_base_ptr) = 0x1;
 

@@ -44,10 +44,10 @@
 // SPI APIs
 
 // start spi
-void spi_init(void *spi_base);
+void spi_init(void);
 
 // disable spi
-void spi_disable();
+void spi_disable(void);
 
 // send a byte
 uint8_t spi_send(uint8_t dat);

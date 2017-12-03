@@ -1,11 +1,15 @@
 /* placeholder for future usage.  */
 #include "lib/oofatfs/ff.h"
+#include <stdlib.h>
+
 struct dirent { char *d_name; };
 struct dirent *readdir(FF_DIR *dir);
 FF_DIR *opendir(const char *path);
   void closedir(FF_DIR *dir);
 
 void printm(const char* s, ...);
+#define abort() { printm("Abort in file "__FILE__" at line %d\n", __LINE__); while(1); }
+
 static const double one_log2 = 1.442695040888963;
 static const double lookup[] = {
 1.414213562373095,

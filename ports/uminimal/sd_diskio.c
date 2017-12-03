@@ -85,9 +85,8 @@ uint8_t CardType;          /* Card type flags */
 static
 void power_on (void)
 {
-  extern volatile uint32_t *spi_base_ptr;
   uint32_t timeout = 100*1000;
-  spi_init((void*)spi_base_ptr);
+  spi_init();
   while(timeout--);
 }
 

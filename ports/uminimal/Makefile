@@ -71,7 +71,7 @@ INC += -I$(BUILD)
 # compiler settings
 CWARN = -Wall -Werror
 CWARN += -Wpointer-arith -Wuninitialized
-CFLAGS = $(INC) $(CWARN) -std=gnu99 -DUNIX $(CFLAGS_MOD) $(COPT) $(CFLAGS_EXTRA) -Dabort=_abort_ -Dclose=_close_ -Dclosedir=_closedir_ -D_exit=__exit_ -Dfsync=_fsync_ -Dgetenv=_getenv_ -Dgettimeofday=_gettimeofday_ -Disatty=_isatty_ -Dlseek=_lseek_ -Dmkdir=_mkdir_ -Dopen=_open_ -Dopendir=_opendir_ -Dread=_read_ -Dreaddir=_readdir_ -Drealpath=_realpath_ -Dsbrk=_sbrk_ -Dsigemptyset=_sigemptyset_ -Dsignal=_signal_ -Dstat=_stat_ -Dstrerror=_strerror_ -Dsystem=_system_ -Dtcgetattr=_tcgetattr_ -Dtcsetattr=_tcsetattr_ -Dunlink=_unlink_ -Dwrite=_write_ -Dmalloc=_malloc_ -Drealloc=_realloc_ -Dfree=_free_ -Dstrchr=_strchr_
+CFLAGS = $(INC) $(CWARN) -std=gnu99 -DUNIX $(CFLAGS_MOD) $(COPT) $(CFLAGS_EXTRA) -Dclose=_close_ -Dclosedir=_closedir_ -D_exit=__exit_ -Dfsync=_fsync_ -Dgetenv=_getenv_ -Dgettimeofday=_gettimeofday_ -Disatty=_isatty_ -Dlseek=_lseek_ -Dmkdir=_mkdir_ -Dopen=_open_ -Dopendir=_opendir_ -Dread=_read_ -Dreaddir=_readdir_ -Drealpath=_realpath_ -Dsbrk=_sbrk_ -Dsigemptyset=_sigemptyset_ -Dsignal=_signal_ -Dstat=_stat_ -Dstrerror=_strerror_ -Dsystem=_system_ -Dtcgetattr=_tcgetattr_ -Dtcsetattr=_tcsetattr_ -Dunlink=_unlink_ -Dwrite=_write_ -Dmalloc=_malloc_ -Drealloc=_realloc_ -Dfree=_free_ -Dstrchr=_strchr_
 
 
 # Debugging/Optimization

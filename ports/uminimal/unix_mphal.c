@@ -202,7 +202,6 @@ FIL *files[32];
 
 #undef abort
 #undef exit
-#define abort() { printm("Abort in file "__FILE__" at line %d\n", __LINE__); while(1); }
 
 bool sdcard_is_present(void) {
   return 1;
@@ -418,7 +417,9 @@ FF_DIR *opendir(const char *path)
   fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
   FRESULT rslt;
   FF_DIR *dir = calloc(1, sizeof(FF_DIR));
+  mount_and_check();
   rslt = f_opendir(&vfs_fat->fatfs, dir, path);
+  if (rslt) return 0;
   return dir;
 }
 
@@ -429,13 +430,19 @@ struct dirent *readdir(FF_DIR *dir)
   static FILINFO fno;
   memset(&fno, 0, sizeof(fno));
   rslt = f_readdir(dir, &fno);
+  if (rslt || !fno.fname[0])
+    {
+      return 0;
+    }
   retval.d_name = fno.fname;
   return &retval;
 }
 
 void closedir(FF_DIR *dir)
 {
-  free(dir);
+  FRESULT rslt = f_closedir(dir);
+  if (!rslt)
+    free(dir);
 }
 
 ssize_t _read_ (int __fd, void *__buf, size_t __nbytes)
