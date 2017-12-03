@@ -197,7 +197,6 @@ void mp_hal_stdout_tx_strn(const char *str, mp_uint_t len)
 }
 
 struct termios;
-typedef void DIR;
 
 FIL *files[32];
 
@@ -362,9 +361,8 @@ STATIC mp_obj_t pyb_sdcard_make_new(const mp_obj_type_t *type, size_t n_args, si
     return (mp_obj_t)&pyb_sdcard_obj;
 }
 
-int mount_and_get_fd(void)
+void mount_and_check(void)
 {
-  int fd = 3;
   fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
   if (!vfs_fat->flags)
     {
@@ -388,6 +386,12 @@ int mount_and_get_fd(void)
 	  abort();
 	}
     }
+}
+
+int mount_and_get_fd(void)
+{
+  int fd = 3;
+  mount_and_check();
   while (files[fd])
     ++fd;
   files[fd] = calloc(1, sizeof(FIL));
@@ -396,7 +400,6 @@ int mount_and_get_fd(void)
 
 void _abort_ (void) { abort(); }
 int _close_ (int __fd) { abort(); }
-int _closedir_ (DIR *__dirp) { abort(); }
 char *_getenv_ (const char *__name) { return NULL; }
 int _isatty_ (int __fd) { return __fd < 3; }
 __off_t _lseek_ (int __fd, __off_t __offset, int __whence)  { abort(); }
@@ -409,7 +412,31 @@ int _open_(const char *pathname, int flags, ...) {
   if (fr) return -1;
   return fd;
 }
-DIR *_opendir_ (const char *__name) { abort(); }
+
+FF_DIR *opendir(const char *path)
+{
+  fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
+  FRESULT rslt;
+  FF_DIR *dir = calloc(1, sizeof(FF_DIR));
+  rslt = f_opendir(&vfs_fat->fatfs, dir, path);
+  return dir;
+}
+
+struct dirent *readdir(FF_DIR *dir)
+{
+  static struct dirent retval;  
+  FRESULT rslt;
+  static FILINFO fno;
+  memset(&fno, 0, sizeof(fno));
+  rslt = f_readdir(dir, &fno);
+  retval.d_name = fno.fname;
+  return &retval;
+}
+
+void closedir(FF_DIR *dir)
+{
+  free(dir);
+}
 
 ssize_t _read_ (int __fd, void *__buf, size_t __nbytes)
 {
@@ -440,8 +467,22 @@ ssize_t _write_ (int __fd, const void *__buf, size_t __n)
     }
 }
 
-struct dirent *_readdir_ (DIR *__dirp) { abort(); }
-int _stat_ (const char *__restrict __file,   struct stat *__restrict __buf) { abort(); }
+int _stat_ (const char *__restrict __file,   struct stat *__restrict __buf)
+{
+  FRESULT fr;
+  FILINFO fno;
+  fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
+  mount_and_check();
+  fr = f_stat(&vfs_fat->fatfs, __file, &fno);
+  if (fr) return -1;
+  memset(__buf, 0, sizeof(struct stat));
+  __buf->st_size = fno.fsize;
+  __buf->st_mtime = fno.fdate;
+  __buf->st_mtime = fno.ftime;
+  __buf->st_mode = fno.fattrib;
+  return 0;
+}
+
 //int _gettimeofday_(struct timeval *tv, struct timezone *tz) { abort(); }
 int _sigemptyset_(sigset_t *set) { abort(); }
 int _sigaction_(int signum, const struct sigaction *act, struct sigaction *oldact)

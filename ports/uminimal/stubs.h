@@ -1,4 +1,9 @@
 /* placeholder for future usage.  */
+#include "lib/oofatfs/ff.h"
+struct dirent { char *d_name; };
+struct dirent *readdir(FF_DIR *dir);
+FF_DIR *opendir(const char *path);
+  void closedir(FF_DIR *dir);
 
 void printm(const char* s, ...);
 static const double one_log2 = 1.442695040888963;

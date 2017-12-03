@@ -25,18 +25,15 @@
  * THE SOFTWARE.
  */
 
-#ifdef __x86_64
 
-#include "stubs.h"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#include <dirent.h>
+#include "stubs.h"
 #include "py/mpconfig.h"
-
 #include "py/runtime.h"
 #include "py/objtuple.h"
 #include "py/mphal.h"
@@ -145,7 +142,7 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_1(mod_os_mkdir_obj, mod_os_mkdir);
 typedef struct _mp_obj_listdir_t {
     mp_obj_base_t base;
     mp_fun_1_t iternext;
-    DIR *dir;
+    FF_DIR *dir;
 } mp_obj_listdir_t;
 
 STATIC mp_obj_t listdir_next(mp_obj_t self_in) {
@@ -223,24 +220,3 @@ const mp_obj_module_t mp_module_os = {
     .base = { &mp_type_module },
     .globals = (mp_obj_dict_t*)&mp_module_os_globals,
 };
-
-#else
-
-#include "py/mpconfig.h"
-#include "py/runtime.h"
-#include "py/objtuple.h"
-#include "py/mphal.h"
-#include "extmod/misc.h"
-
-STATIC const mp_rom_map_elem_t mp_module_os_globals_table[] = {
-    { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_uos) },
-};
-
-STATIC MP_DEFINE_CONST_DICT(mp_module_os_globals, mp_module_os_globals_table);
-
-const mp_obj_module_t mp_module_os = {
-    .base = { &mp_type_module },
-    .globals = (mp_obj_dict_t*)&mp_module_os_globals,
-};
-
-#endif

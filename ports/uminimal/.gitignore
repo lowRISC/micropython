@@ -12,3 +12,4 @@ micropython_nanbox
 micropython_freedos*
 *.py
 *.gcov
+*.d
