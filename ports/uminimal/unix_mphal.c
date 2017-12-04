@@ -52,118 +52,12 @@ static int mapfd;
 fs_user_mount_t fs_user_mount_sd;
 #define SDCARD_BLOCK_SIZE (512)
 
-#ifdef __x86_64
-
-#include <sys/mman.h>
-
-static void *mapping;
-
-void sdcard_init(void) {
-#undef open  
-#undef lseek
-  int open(const char *pathname, int flags, mode_t mode) ;
-  __off_t lseek (int __fd, __off_t __offset, int __whence);
-  mapfd = open("/var/tmp/sdcard.img", O_RDWR, 0666);
-  if (mapfd > 0)
-    {
-      int len = lseek(mapfd, 0, SEEK_END);
-      printm("Mapping length %d bytes\n", len);
-      mapping = mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_SHARED, mapfd, 0);
-    }
-}
-
-void printm(const char* s, ...)
-{
-  char buf[256];
-  va_list vl;
-
-  va_start(vl, s);
-  vsnprintf(buf, sizeof buf, s, vl);
-  va_end(vl);
-
-  mp_hal_stdout_tx_str(buf);
-}
-
-extern uint8_t uart_recv()
-{
-#undef read
-  extern ssize_t read (int __fd, void *__buf, size_t __nbytes);
-  unsigned char c;
-  int ret = read(0, &c, 1);
-  if (ret == 0) {
-    c = 4; // EOF, ctrl-D
-  } else if (c == '\n') {
-    c = '\r';
-  }
-  return c;
-}
-
-extern void uart_send_buf(const char *str, const int32_t len)
-{
-#undef write
-  extern ssize_t write (int __fd, const void *__buf, size_t __n);
-  int ret = write(1, str, len);
-  (void)ret; // to suppress compiler warning
-}
-
-#undef sbrk
-void *sbrk (intptr_t __delta);
-void *_sbrk_ (intptr_t __delta)
-{
-  if (__delta < 0) __delta = 0;
-  void *ptr = sbrk(__delta);
-  printm("sbrk(%d) returned %p\n", __delta, ptr);
-  return ptr;
-}
-
-mp_uint_t sdcard_read_blocks(uint8_t *dest, uint32_t block_num, uint32_t num_blocks) {
-    HAL_StatusTypeDef err = HAL_OK;
-    memcpy(dest, block_num*512+(char*)mapping, num_blocks*512);
-    return err;
-}
-
-mp_uint_t sdcard_write_blocks(const uint8_t *src, uint32_t block_num, uint32_t num_blocks) {
-    HAL_StatusTypeDef err = HAL_OK;
-    memcpy(block_num*512+(char*)mapping, src, num_blocks*512);
-    return err;
-}
-
-#else
-#include "sd_diskio.h"
-#include "extmod/vfs_fat.h"
-
-mp_uint_t sdcard_read_blocks(uint8_t *dest, uint32_t block_num, uint32_t num_blocks) {
-    fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
-    DRESULT rslt = sd_disk_read(0, dest, block_num, num_blocks);
-    return rslt == RES_OK ? HAL_OK : HAL_ERROR;
-}
-
-mp_uint_t sdcard_write_blocks(const uint8_t *src, uint32_t block_num, uint32_t num_blocks) {
-    fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
-    DRESULT rslt = sd_disk_write(0, src, block_num, num_blocks);
-    return rslt == RES_OK ? HAL_OK : HAL_ERROR;
-}
-
-void sdcard_init(void)
-{
-  mapfd = 1024; // an invalid value
-  printm("sdcard init\n");
-  sd_disk_initialize(0);
-}
-
+void mount_and_check(void);
+void sdcard_init(void);
 extern uint8_t uart_recv();
 extern void uart_send_buf(const char *buf, const int32_t len);
-
-void *_sbrk_(intptr_t siz)
-{
-  static uint8_t *sbrk = (uint8_t *)0x87000000;
-  void *ptr = sbrk;
-  if (siz < 0) siz = 0;
-  printm("sbrk(%d) returned %p\n", siz, ptr);
-  sbrk += ((siz-1)|7)+1;
-  return ptr;
-}
-#endif
+mp_uint_t sdcard_read_blocks(uint8_t *dest, uint32_t block_num, uint32_t num_blocks);
+mp_uint_t sdcard_write_blocks(const uint8_t *src, uint32_t block_num, uint32_t num_blocks);
 
 void mp_hal_set_interrupt_char(char c)
 {
@@ -200,7 +94,6 @@ struct termios;
 
 FIL *files[32];
 
-#undef abort
 #undef exit
 
 bool sdcard_is_present(void) {
@@ -360,6 +253,8 @@ STATIC mp_obj_t pyb_sdcard_make_new(const mp_obj_type_t *type, size_t n_args, si
     return (mp_obj_t)&pyb_sdcard_obj;
 }
 
+static int my_fr;
+
 void mount_and_check(void)
 {
   fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
@@ -378,8 +273,8 @@ void mount_and_check(void)
       vfs_fat->u.ioctl[0] = (mp_obj_t)&pyb_sdcard_ioctl_obj;
       vfs_fat->u.ioctl[1] = (mp_obj_t)&pyb_sdcard_obj;
       // try to mount the flash
-      FRESULT res = f_mount(&vfs_fat->fatfs);
-      if (res)
+      my_fr = f_mount(&vfs_fat->fatfs);
+      if (my_fr)
 	{
 	  printm("Mount failed\n");
 	  abort();
@@ -397,12 +292,10 @@ int mount_and_get_fd(void)
   return fd;
 }
 
-void _abort_ (void) { abort(); }
-
 int _close_ (int __fd)
 {
-  FRESULT fr = f_close(files[__fd]);
-  if (fr) return -1;
+  my_fr = f_close(files[__fd]);
+  if (my_fr) return -1;
   free(files[__fd]);
   files[__fd] = 0;
   return 0;
@@ -413,12 +306,11 @@ int _isatty_ (int __fd) { return __fd < 3; }
 
 __off_t _lseek_ (int __fd, __off_t __offset, int __whence)
 {
-  FRESULT fr;
   switch(__whence)
     {
     case SEEK_SET:
-      fr = f_lseek(files[__fd], __offset);
-      if (fr == FR_OK)
+      my_fr = f_lseek(files[__fd], __offset);
+      if (my_fr == FR_OK)
 	return __offset;
       else
 	return -1;
@@ -432,39 +324,45 @@ __off_t _lseek_ (int __fd, __off_t __offset, int __whence)
 }
 
 int _open_(const char *pathname, int flags, ...) {
-  FRESULT fr;
   fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
   int fd = mount_and_get_fd();
-  int fa = 0;
-  if (flags & O_RDONLY) fa |= FA_READ;
-  if (flags & O_WRONLY) fa |= FA_WRITE;
+  int fa;
+  switch(flags & O_ACCMODE)
+    {
+    case O_RDONLY: fa = FA_READ; break;
+    case O_WRONLY: fa = FA_WRITE; break;
+    case O_RDWR: fa = FA_READ|FA_WRITE; break;
+    default: fa = 0; break;
+    }
   if (flags & O_APPEND) fa |= FA_OPEN_APPEND;
   if (flags & O_CREAT) fa |= FA_CREATE_NEW;
-  if (flags & O_TRUNC) fa |= FA_CREATE_ALWAYS;
-  fr = f_open(&vfs_fat->fatfs, files[fd], pathname, fa);
-  if (fr) return -1;
+  if ((flags & O_CREAT) && (flags & O_TRUNC))
+    {
+    my_fr = f_unlink(&vfs_fat->fatfs, pathname);
+    if (my_fr) return -1;
+    }
+  my_fr = f_open(&vfs_fat->fatfs, files[fd], pathname, fa);
+  if (my_fr) return -1;
   return fd;
 }
 
 FF_DIR *opendir(const char *path)
 {
   fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
-  FRESULT rslt;
   FF_DIR *dir = calloc(1, sizeof(FF_DIR));
   mount_and_check();
-  rslt = f_opendir(&vfs_fat->fatfs, dir, path);
-  if (rslt) return 0;
+  my_fr = f_opendir(&vfs_fat->fatfs, dir, path);
+  if (my_fr) return 0;
   return dir;
 }
 
 struct dirent *readdir(FF_DIR *dir)
 {
   static struct dirent retval;  
-  FRESULT rslt;
   static FILINFO fno;
   memset(&fno, 0, sizeof(fno));
-  rslt = f_readdir(dir, &fno);
-  if (rslt || !fno.fname[0])
+  my_fr = f_readdir(dir, &fno);
+  if (my_fr || !fno.fname[0])
     {
       return 0;
     }
@@ -474,24 +372,33 @@ struct dirent *readdir(FF_DIR *dir)
 
 void closedir(FF_DIR *dir)
 {
-  FRESULT rslt = f_closedir(dir);
-  if (!rslt)
+  my_fr = f_closedir(dir);
+  if (my_fr == FR_OK)
     free(dir);
 }
 
 ssize_t _read_ (int __fd, void *__buf, size_t __nbytes)
 {
-  FRESULT fr;
   UINT br;
-  fr = f_read(files[__fd], __buf, __nbytes, &br);
-  if (fr) return -1;  
-  //  printm("read(%d,%p,%d);\n", __fd, __buf, __nbytes);
-  return br;
+  switch(__fd)
+    {
+    case 0:
+      *(char *)__buf = mp_hal_stdin_rx_chr();
+      return 1;
+      break;
+    case 1:
+    case 2:
+      return -1;
+    default:
+      my_fr = f_read(files[__fd], __buf, __nbytes, &br);
+      if (my_fr) return -1;  
+      printm("read(%d,%p,%d);\n", __fd, __buf, __nbytes);
+      return br;
+    }
 }
 
 ssize_t _write_ (int __fd, const void *__buf, size_t __n)
 {
-  FRESULT fr;
   UINT br;
   switch(__fd)
     {
@@ -501,8 +408,8 @@ ssize_t _write_ (int __fd, const void *__buf, size_t __n)
       return __n;
       break;
     default:
-      fr = f_write(files[__fd], __buf, __n, &br);
-      if (fr) return -1;  
+      my_fr = f_write(files[__fd], __buf, __n, &br);
+      if (my_fr) return -1;  
       printm("write(%d,%p,%d);\n", __fd, __buf, __n);
       return br;
     }
@@ -510,12 +417,11 @@ ssize_t _write_ (int __fd, const void *__buf, size_t __n)
 
 int _stat_ (const char *__restrict __file,   struct stat *__restrict __buf)
 {
-  FRESULT fr;
   FILINFO fno;
   fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
   mount_and_check();
-  fr = f_stat(&vfs_fat->fatfs, __file, &fno);
-  if (fr) return -1;
+  my_fr = f_stat(&vfs_fat->fatfs, __file, &fno);
+  if (my_fr) return -1;
   memset(__buf, 0, sizeof(struct stat));
   __buf->st_size = fno.fsize;
   __buf->st_mtime = fno.fdate;
@@ -526,11 +432,10 @@ int _stat_ (const char *__restrict __file,   struct stat *__restrict __buf)
 
 int _mkdir_ (const char *__path, __mode_t __mode)
 {
-  FRESULT fr;
   fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
   mount_and_check();
-  fr = f_mkdir(&vfs_fat->fatfs, __path);
-  if (fr) return -1;
+  my_fr = f_mkdir(&vfs_fat->fatfs, __path);
+  if (my_fr) return -1;
   return 0;
 }
 
@@ -551,7 +456,14 @@ int _tcsetattr_(int fd, int optional_actions, const struct termios *termios_p)
   abort();
 }
 
-int _unlink_(const char *pathname) { abort(); }
+int _unlink_(const char *pathname)
+{
+  fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
+  mount_and_check();
+  my_fr = f_unlink(&vfs_fat->fatfs, pathname);
+  if (my_fr) return -1;
+  abort();
+}
 
 char *_realpath_(const char *path, char *resolved_path)
 {
@@ -568,15 +480,6 @@ void exit (int __status) { abort(); }
 void _exit_ (int __status) { abort(); }
 void __exit_ (int __status) { abort(); }
 
-int __errno;
-
-#undef abort
-
-void abort(void)
-{
-  while (1);
-}
-
 void mp_hal_stdout_tx_str(const char *str) {
     mp_hal_stdout_tx_strn(str, strlen(str));
 }
@@ -586,3 +489,126 @@ void mp_hal_stdout_tx_strn_cooked(const char *str, size_t len) {
     mp_hal_stdout_tx_strn(str, len);
 }
 
+void _abort_ (void) { abort(); }
+
+#ifdef __x86_64
+
+#include <sys/mman.h>
+
+static void *mapping;
+
+void sdcard_init(void) {
+#undef open  
+#undef lseek
+  int open(const char *pathname, int flags, mode_t mode) ;
+  __off_t lseek (int __fd, __off_t __offset, int __whence);
+  mapfd = open("/var/tmp/sdcard.img", O_RDWR, 0666);
+  if (mapfd > 0)
+    {
+      int len = lseek(mapfd, 0, SEEK_END);
+      printm("Mapping length %d bytes\n", len);
+      mapping = mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_SHARED, mapfd, 0);
+    }
+}
+
+void printm(const char* s, ...)
+{
+  char buf[256];
+  va_list vl;
+
+  va_start(vl, s);
+  vsnprintf(buf, sizeof buf, s, vl);
+  va_end(vl);
+
+  mp_hal_stdout_tx_str(buf);
+}
+
+extern uint8_t uart_recv()
+{
+#undef read
+  extern ssize_t read (int __fd, void *__buf, size_t __nbytes);
+  unsigned char c;
+  int ret = read(0, &c, 1);
+  if (ret == 0) {
+    c = 4; // EOF, ctrl-D
+  } else if (c == '\n') {
+    c = '\r';
+  }
+  return c;
+}
+
+extern void uart_send_buf(const char *str, const int32_t len)
+{
+#undef write
+  extern ssize_t write (int __fd, const void *__buf, size_t __n);
+  int ret = write(1, str, len);
+  (void)ret; // to suppress compiler warning
+}
+
+#undef sbrk
+void *sbrk (intptr_t __delta);
+void *_sbrk_ (intptr_t __delta)
+{
+  if (__delta < 0) __delta = 0;
+  void *ptr = sbrk(__delta);
+  printm("sbrk(%d) returned %p\n", __delta, ptr);
+  return ptr;
+}
+
+mp_uint_t sdcard_read_blocks(uint8_t *dest, uint32_t block_num, uint32_t num_blocks) {
+    HAL_StatusTypeDef err = HAL_OK;
+    memcpy(dest, block_num*512+(char*)mapping, num_blocks*512);
+    return err;
+}
+
+mp_uint_t sdcard_write_blocks(const uint8_t *src, uint32_t block_num, uint32_t num_blocks) {
+    HAL_StatusTypeDef err = HAL_OK;
+    memcpy(block_num*512+(char*)mapping, src, num_blocks*512);
+    return err;
+}
+
+#else
+#include "sd_diskio.h"
+#include "extmod/vfs_fat.h"
+
+mp_uint_t sdcard_read_blocks(uint8_t *dest, uint32_t block_num, uint32_t num_blocks) {
+    fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
+    DRESULT rslt = sd_disk_read(0, dest, block_num, num_blocks);
+    return rslt == RES_OK ? HAL_OK : HAL_ERROR;
+}
+
+mp_uint_t sdcard_write_blocks(const uint8_t *src, uint32_t block_num, uint32_t num_blocks) {
+    fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
+    DRESULT rslt = sd_disk_write(0, src, block_num, num_blocks);
+    return rslt == RES_OK ? HAL_OK : HAL_ERROR;
+}
+
+void sdcard_init(void)
+{
+  mapfd = 1024; // an invalid value
+  printm("sdcard init\n");
+  sd_disk_initialize(0);
+}
+
+void *_sbrk_(intptr_t siz)
+{
+  static uint8_t *sbrk = (uint8_t *)0x87000000;
+  void *ptr = sbrk;
+  if (siz < 0) siz = 0;
+  printm("sbrk(%d) returned %p\n", siz, ptr);
+  sbrk += ((siz-1)|7)+1;
+  return ptr;
+}
+#undef abort
+
+void abort(void)
+{
+  while (1);
+}
+
+int *__errno(void)
+{
+  return &my_fr;
+}
+
+#endif

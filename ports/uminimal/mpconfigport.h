@@ -63,6 +63,8 @@
 #define MICROPY_OPT_CACHE_MAP_LOOKUP_IN_BYTECODE (1)
 #define MICROPY_KBD_EXCEPTION       (1)
 
+#define MICROPY_PY_MACHINE          (1)
+
 //#define MICROPY_PY_SYS_PLATFORM     "uminimal"
 
 // type definitions for the specific machine
@@ -127,6 +129,7 @@ typedef long mp_off_t;
 #define MICROPY_PY_UOS_VFS_DEF { MP_ROM_QSTR(MP_QSTR_uos_vfs), MP_ROM_PTR(&mp_module_uos_vfs) },
 
 #define MICROPY_PORT_BUILTIN_MODULES \
+    { MP_ROM_QSTR(MP_QSTR_umachine), MP_ROM_PTR(&mp_module_machine) }, \
     { MP_ROM_QSTR(MP_QSTR_uos), MP_ROM_PTR(&mp_module_os) }, \
     MICROPY_PY_UOS_VFS_DEF				\
 

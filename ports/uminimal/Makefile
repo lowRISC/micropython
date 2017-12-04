@@ -186,6 +186,7 @@ SRC_C = \
 	unix_mphal.c \
 	input.c \
 	modos.c \
+	modmachine.c \
 	moduos_vfs.c \
 	fatfs_port.c \
 	sd_diskio.c \

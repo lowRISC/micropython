@@ -754,6 +754,8 @@ STATIC mp_obj_t fdfile_open(const mp_obj_type_t *type, mp_arg_val_t *args) {
     mp_obj_fdfile_t *o = m_new_obj(mp_obj_fdfile_t);
     const char *mode_s = mp_obj_str_get_str(args[1].u_obj);
 
+    printm("mode=%s\n", mode_s);
+    
     int mode_rw = 0, mode_x = 0;
     while (*mode_s) {
         switch (*mode_s++) {
