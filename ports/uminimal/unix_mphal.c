@@ -63,7 +63,7 @@ void sdcard_init(void) {
 #undef lseek
   int open(const char *pathname, int flags, mode_t mode) ;
   __off_t lseek (int __fd, __off_t __offset, int __whence);
-  mapfd = open("sdcard.img", O_RDWR, 0666);
+  mapfd = open("/var/tmp/sdcard.img", O_RDWR, 0666);
   if (mapfd > 0)
     {
       int len = lseek(mapfd, 0, SEEK_END);
@@ -398,16 +398,50 @@ int mount_and_get_fd(void)
 }
 
 void _abort_ (void) { abort(); }
-int _close_ (int __fd) { abort(); }
+
+int _close_ (int __fd)
+{
+  FRESULT fr = f_close(files[__fd]);
+  if (fr) return -1;
+  free(files[__fd]);
+  files[__fd] = 0;
+  return 0;
+}
+
 char *_getenv_ (const char *__name) { return NULL; }
 int _isatty_ (int __fd) { return __fd < 3; }
-__off_t _lseek_ (int __fd, __off_t __offset, int __whence)  { abort(); }
-int _mkdir_ (const char *__path, __mode_t __mode) { abort(); }
+
+__off_t _lseek_ (int __fd, __off_t __offset, int __whence)
+{
+  FRESULT fr;
+  switch(__whence)
+    {
+    case SEEK_SET:
+      fr = f_lseek(files[__fd], __offset);
+      if (fr == FR_OK)
+	return __offset;
+      else
+	return -1;
+    case SEEK_CUR:
+      return -1;
+    case SEEK_END:
+      return -1;
+    default:
+      return -1;
+    }
+}
+
 int _open_(const char *pathname, int flags, ...) {
   FRESULT fr;
   fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
   int fd = mount_and_get_fd();
-  fr = f_open(&vfs_fat->fatfs, files[fd], pathname, FA_READ);
+  int fa = 0;
+  if (flags & O_RDONLY) fa |= FA_READ;
+  if (flags & O_WRONLY) fa |= FA_WRITE;
+  if (flags & O_APPEND) fa |= FA_OPEN_APPEND;
+  if (flags & O_CREAT) fa |= FA_CREATE_NEW;
+  if (flags & O_TRUNC) fa |= FA_CREATE_ALWAYS;
+  fr = f_open(&vfs_fat->fatfs, files[fd], pathname, fa);
   if (fr) return -1;
   return fd;
 }
@@ -487,6 +521,16 @@ int _stat_ (const char *__restrict __file,   struct stat *__restrict __buf)
   __buf->st_mtime = fno.fdate;
   __buf->st_mtime = fno.ftime;
   __buf->st_mode = fno.fattrib;
+  return 0;
+}
+
+int _mkdir_ (const char *__path, __mode_t __mode)
+{
+  FRESULT fr;
+  fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
+  mount_and_check();
+  fr = f_mkdir(&vfs_fat->fatfs, __path);
+  if (fr) return -1;
   return 0;
 }
 
