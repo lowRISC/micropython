@@ -307,107 +307,8 @@ STATIC int do_file(const char *file) {
     return execute_from_lexer(LEX_SRC_FILENAME, file, MP_PARSE_FILE_INPUT, false);
 }
 
-STATIC int do_str(const char *str) {
+int do_str(const char *str) {
     return execute_from_lexer(LEX_SRC_STR, str, MP_PARSE_FILE_INPUT, false);
-}
-
-STATIC int usage(char **argv) {
-    printf(
-"usage: %s [<opts>] [-X <implopt>] [-c <command>] [<filename>]\n"
-"Options:\n"
-"-v : verbose (trace various operations); can be multiple\n"
-"-O[N] : apply bytecode optimizations of level N\n"
-"\n"
-"Implementation specific options (-X):\n", argv[0]
-);
-    int impl_opts_cnt = 0;
-    printf(
-"  compile-only                 -- parse and compile only\n"
-"  emit={bytecode,native,viper} -- set the default code emitter\n"
-);
-    impl_opts_cnt++;
-#if MICROPY_ENABLE_GC
-    printf(
-"  heapsize=<n>[w][K|M] -- set the heap size for the GC (default %ld)\n"
-, heap_size);
-    impl_opts_cnt++;
-#endif
-
-    if (impl_opts_cnt == 0) {
-        printf("  (none)\n");
-    }
-
-    return 1;
-}
-
-// Process options which set interpreter init options
-STATIC void pre_process_options(int argc, char **argv) {
-    for (int a = 1; a < argc; a++) {
-        if (argv[a][0] == '-') {
-            if (strcmp(argv[a], "-X") == 0) {
-                if (a + 1 >= argc) {
-                    _exit(usage(argv));
-                }
-                if (0) {
-                } else if (strcmp(argv[a + 1], "compile-only") == 0) {
-                    compile_only = true;
-                } else if (strcmp(argv[a + 1], "emit=bytecode") == 0) {
-                    emit_opt = MP_EMIT_OPT_BYTECODE;
-                } else if (strcmp(argv[a + 1], "emit=native") == 0) {
-                    emit_opt = MP_EMIT_OPT_NATIVE_PYTHON;
-                } else if (strcmp(argv[a + 1], "emit=viper") == 0) {
-                    emit_opt = MP_EMIT_OPT_VIPER;
-#if MICROPY_ENABLE_GC
-                } else if (strncmp(argv[a + 1], "heapsize=", sizeof("heapsize=") - 1) == 0) {
-                    char *end;
-                    heap_size = strtol(argv[a + 1] + sizeof("heapsize=") - 1, &end, 0);
-                    // Don't bring unneeded libc dependencies like tolower()
-                    // If there's 'w' immediately after number, adjust it for
-                    // target word size. Note that it should be *before* size
-                    // suffix like K or M, to avoid confusion with kilowords,
-                    // etc. the size is still in bytes, just can be adjusted
-                    // for word size (taking 32bit as baseline).
-                    bool word_adjust = false;
-                    if ((*end | 0x20) == 'w') {
-                        word_adjust = true;
-                        end++;
-                    }
-                    if ((*end | 0x20) == 'k') {
-                        heap_size *= 1024;
-                    } else if ((*end | 0x20) == 'm') {
-                        heap_size *= 1024 * 1024;
-                    } else {
-                        // Compensate for ++ below
-                        --end;
-                    }
-                    if (*++end != 0) {
-                        goto invalid_arg;
-                    }
-                    if (word_adjust) {
-                        heap_size = heap_size * BYTES_PER_WORD / 4;
-                    }
-                    // If requested size too small, we'll crash anyway
-                    if (heap_size < 700) {
-                        goto invalid_arg;
-                    }
-#endif
-                } else {
-#if MICROPY_ENABLE_GC
-invalid_arg:
-                    printf("Invalid option\n");
-                    _exit(usage(argv));
-#endif
-                }
-                a++;
-            }
-        }
-    }
-}
-
-STATIC void set_sys_argv(char *argv[], int argc, int start_arg) {
-    for (int i = start_arg; i < argc; i++) {
-        mp_obj_list_append(mp_sys_argv, MP_OBJ_NEW_QSTR(qstr_from_str(argv[i])));
-    }
 }
 
 #ifdef _WIN32
@@ -416,12 +317,12 @@ STATIC void set_sys_argv(char *argv[], int argc, int start_arg) {
 #define PATHLIST_SEP_CHAR ':'
 #endif
 
-MP_NOINLINE int main_(int argc, char **argv);
+MP_NOINLINE int main_();
 
 #ifdef __x86_64
-int main(int argc, char **argv) {
+int main() {
 #else
-int micropython_main() { int argc = 1; char *argv[] = {"a.out", NULL};
+  int micropython_main() {
 #endif
  
     #if MICROPY_PY_THREAD
@@ -433,10 +334,10 @@ int micropython_main() { int argc = 1; char *argv[] = {"a.out", NULL};
     // this function. main_() itself may have other functions inlined (with
     // their own stack variables), that's why we need this main/main_ split.
     mp_stack_ctrl_init();
-    return main_(argc, argv);
+    return main_(0, NULL);
 }
 
-MP_NOINLINE int main_(int argc, char **argv) {
+MP_NOINLINE int main_() {
     #ifdef SIGPIPE
     // Do not raise SIGPIPE, instead return EPIPE. Otherwise, e.g. writing
     // to peer-closed socket will lead to sudden termination of MicroPython
@@ -452,8 +353,6 @@ MP_NOINLINE int main_(int argc, char **argv) {
     #endif
 
     mp_stack_set_limit(40000 * (BYTES_PER_WORD / 4));
-
-    pre_process_options(argc, argv);
 
 #if MICROPY_ENABLE_GC
     char *heap = malloc(heap_size);
@@ -539,99 +438,8 @@ MP_NOINLINE int main_(int argc, char **argv) {
     const int NOTHING_EXECUTED = -2;
     int ret = NOTHING_EXECUTED;
     bool inspect = false;
-    for (int a = 1; a < argc; a++) {
-        if (argv[a][0] == '-') {
-            if (strcmp(argv[a], "-i") == 0) {
-                inspect = true;
-            } else if (strcmp(argv[a], "-c") == 0) {
-                if (a + 1 >= argc) {
-                    return usage(argv);
-                }
-                ret = do_str(argv[a + 1]);
-                if (ret & FORCED_EXIT) {
-                    break;
-                }
-                a += 1;
-            } else if (strcmp(argv[a], "-m") == 0) {
-                if (a + 1 >= argc) {
-                    return usage(argv);
-                }
-                mp_obj_t import_args[4];
-                import_args[0] = mp_obj_new_str(argv[a + 1], strlen(argv[a + 1]));
-                import_args[1] = import_args[2] = mp_const_none;
-                // Ask __import__ to handle imported module specially - set its __name__
-                // to __main__, and also return this leaf module, not top-level package
-                // containing it.
-                import_args[3] = mp_const_false;
-                // TODO: https://docs.python.org/3/using/cmdline.html#cmdoption-m :
-                // "the first element of sys.argv will be the full path to
-                // the module file (while the module file is being located,
-                // the first element will be set to "-m")."
-                set_sys_argv(argv, argc, a + 1);
-
-                mp_obj_t mod;
-                nlr_buf_t nlr;
-                bool subpkg_tried = false;
-
-            reimport:
-                if (nlr_push(&nlr) == 0) {
-                    mod = mp_builtin___import__(MP_ARRAY_SIZE(import_args), import_args);
-                    nlr_pop();
-                } else {
-                    // uncaught exception
-                    return handle_uncaught_exception(nlr.ret_val) & 0xff;
-                }
-
-                if (mp_obj_is_package(mod) && !subpkg_tried) {
-                    subpkg_tried = true;
-                    vstr_t vstr;
-                    int len = strlen(argv[a + 1]);
-                    vstr_init(&vstr, len + sizeof(".__main__"));
-                    vstr_add_strn(&vstr, argv[a + 1], len);
-                    vstr_add_strn(&vstr, ".__main__", sizeof(".__main__") - 1);
-                    import_args[0] = mp_obj_new_str_from_vstr(&mp_type_str, &vstr);
-                    goto reimport;
-                }
-
-                ret = 0;
-                break;
-            } else if (strcmp(argv[a], "-X") == 0) {
-                a += 1;
-            #if MICROPY_DEBUG_PRINTERS
-            } else if (strcmp(argv[a], "-v") == 0) {
-                mp_verbose_flag++;
-            #endif
-            } else if (strncmp(argv[a], "-O", 2) == 0) {
-                if (unichar_isdigit(argv[a][2])) {
-                    MP_STATE_VM(mp_optimise_value) = argv[a][2] & 0xf;
-                } else {
-                    MP_STATE_VM(mp_optimise_value) = 0;
-                    for (char *p = argv[a] + 1; *p && *p == 'O'; p++, MP_STATE_VM(mp_optimise_value)++);
-                }
-            } else {
-                return usage(argv);
-            }
-        } else {
-            char *pathbuf = malloc(PATH_MAX);
-            char *basedir = realpath(argv[a], pathbuf);
-            if (basedir == NULL) {
-                mp_printf(&mp_stderr_print, "%s: can't open file '%s': [Errno %d] %s\n", argv[0], argv[a], errno, strerror(errno));
-                // CPython exits with 2 in such case
-                ret = 2;
-                break;
-            }
-
-            // Set base dir of the script as first entry in sys.path
-            char *p = strrchr(basedir, '/');
-            path_items[0] = mp_obj_new_str_via_qstr(basedir, p - basedir);
-            free(pathbuf);
-
-            set_sys_argv(argv, argc, a);
-            ret = do_file(argv[a]);
-            break;
-        }
-    }
-
+    do_file("main.py");
+    
     if (ret == NOTHING_EXECUTED || inspect) {
         if (isatty(0)) {
             prompt_read_history();
@@ -754,8 +562,6 @@ STATIC mp_obj_t fdfile_open(const mp_obj_type_t *type, mp_arg_val_t *args) {
     mp_obj_fdfile_t *o = m_new_obj(mp_obj_fdfile_t);
     const char *mode_s = mp_obj_str_get_str(args[1].u_obj);
 
-    printm("mode=%s\n", mode_s);
-    
     int mode_rw = 0, mode_x = 0;
     while (*mode_s) {
         switch (*mode_s++) {
@@ -897,6 +703,7 @@ MP_DEFINE_CONST_FUN_OBJ_KW(mp_builtin_open_obj, 1, mp_builtin_open);
 void __assert_fail(const char *__assertion, const char *__file,
                            unsigned int __line, const char *__function)
 {
+  printm("Assrtion fail: %s, %s:%d in %s\n", __assertion, __file, __line, __function);
   abort();
 }
 

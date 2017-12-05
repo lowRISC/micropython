@@ -339,7 +339,7 @@ int _open_(const char *pathname, int flags, ...) {
   if ((flags & O_CREAT) && (flags & O_TRUNC))
     {
     my_fr = f_unlink(&vfs_fat->fatfs, pathname);
-    if (my_fr) return -1;
+    if ((my_fr != FR_OK) && (my_fr != FR_NO_FILE)) return -1;
     }
   my_fr = f_open(&vfs_fat->fatfs, files[fd], pathname, fa);
   if (my_fr) return -1;
