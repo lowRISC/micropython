@@ -52,7 +52,7 @@ static int mapfd;
 fs_user_mount_t fs_user_mount_sd;
 #define SDCARD_BLOCK_SIZE (512)
 
-void mount_and_check(void);
+int mount_and_check(void);
 void sdcard_init(void);
 extern uint8_t uart_recv();
 extern void uart_send_buf(const char *buf, const int32_t len);
@@ -255,7 +255,7 @@ STATIC mp_obj_t pyb_sdcard_make_new(const mp_obj_type_t *type, size_t n_args, si
 
 static int my_fr;
 
-void mount_and_check(void)
+int mount_and_check(void)
 {
   fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
   if (!vfs_fat->flags)
@@ -277,15 +277,17 @@ void mount_and_check(void)
       if (my_fr)
 	{
 	  printm("Mount failed\n");
-	  abort();
+          return -1;
 	}
     }
+  return 0;
 }
 
 int mount_and_get_fd(void)
 {
   int fd = 3;
-  mount_and_check();
+  if (mount_and_check())
+    return -1;
   while (files[fd])
     ++fd;
   files[fd] = calloc(1, sizeof(FIL));
@@ -324,9 +326,10 @@ __off_t _lseek_ (int __fd, __off_t __offset, int __whence)
 }
 
 int _open_(const char *pathname, int flags, ...) {
+  int fa;
   fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
   int fd = mount_and_get_fd();
-  int fa;
+  if (fd < 0) return -1;
   switch(flags & O_ACCMODE)
     {
     case O_RDONLY: fa = FA_READ; break;
@@ -350,7 +353,8 @@ FF_DIR *opendir(const char *path)
 {
   fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
   FF_DIR *dir = calloc(1, sizeof(FF_DIR));
-  mount_and_check();
+  if (mount_and_check())
+    return 0;
   my_fr = f_opendir(&vfs_fat->fatfs, dir, path);
   if (my_fr) return 0;
   return dir;
@@ -419,7 +423,8 @@ int _stat_ (const char *__restrict __file,   struct stat *__restrict __buf)
 {
   FILINFO fno;
   fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
-  mount_and_check();
+  if (mount_and_check())
+    return -1;
   my_fr = f_stat(&vfs_fat->fatfs, __file, &fno);
   if (my_fr) return -1;
   memset(__buf, 0, sizeof(struct stat));
@@ -433,7 +438,8 @@ int _stat_ (const char *__restrict __file,   struct stat *__restrict __buf)
 int _mkdir_ (const char *__path, __mode_t __mode)
 {
   fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
-  mount_and_check();
+  if (mount_and_check())
+    return -1;
   my_fr = f_mkdir(&vfs_fat->fatfs, __path);
   if (my_fr) return -1;
   return 0;
@@ -459,10 +465,11 @@ int _tcsetattr_(int fd, int optional_actions, const struct termios *termios_p)
 int _unlink_(const char *pathname)
 {
   fs_user_mount_t *vfs_fat = &fs_user_mount_sd;
-  mount_and_check();
+  if (mount_and_check())
+    return -1;
   my_fr = f_unlink(&vfs_fat->fatfs, pathname);
   if (my_fr) return -1;
-  abort();
+  return 0;
 }
 
 char *_realpath_(const char *path, char *resolved_path)
